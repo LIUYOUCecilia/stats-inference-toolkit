@@ -343,14 +343,14 @@ def generate_report(test_results, assumptions_results=None, output_filename="ab_
     # Diagnostic Callout Box
     if conditions_met:
         story.append(make_callout(
-            "✅ CONDITIONS MET",
+            " CONDITIONS MET",
             f"All mathematical conditions for the {test_name} are satisfied. Parametric results are highly reliable.",
             bg_color="#ecfdf5", border_color="#a7f3d0"
         ))
     else:
         rec_test = assumptions_results.get("recommended_test", "Non-parametric alternative") if assumptions_results else "a non-parametric test"
         story.append(make_callout(
-            "⚠️ ASSUMPTION VIOLATION ENCOUNTERED",
+            " ASSUMPTION VIOLATION ENCOUNTERED",
             f"Some statistical conditions are violated. The tool automatically routed/recommends using {rec_test} to ensure robust inference.",
             bg_color="#fffbef", border_color="#fef3c7"
         ))
@@ -477,13 +477,13 @@ def generate_report(test_results, assumptions_results=None, output_filename="ab_
     if reject:
         decision_text += "Since the p-value is less than the significance level, we <b>reject the null hypothesis (H<sub>0</sub>)</b>. " \
                          "There is strong evidence supporting a statistically significant difference between the two variations."
-        conclude_box_title = "🚨 DECISION: REJECT NULL HYPOTHESIS"
+        conclude_box_title = " DECISION: REJECT NULL HYPOTHESIS"
         conclude_box_color = "#fef2f2" # Light Red
         conclude_box_border = "#fecaca"
     else:
         decision_text += "Since the p-value is greater than or equal to the significance level, we <b>fail to reject the null hypothesis (H<sub>0</sub>)</b>. " \
                          "There is insufficient evidence to conclude there is a significant difference between the variations."
-        conclude_box_title = "📌 DECISION: FAIL TO REJECT NULL HYPOTHESIS"
+        conclude_box_title = " DECISION: FAIL TO REJECT NULL HYPOTHESIS"
         conclude_box_color = "#f3f4f6" # Light Gray
         conclude_box_border = "#e5e7eb"
 
