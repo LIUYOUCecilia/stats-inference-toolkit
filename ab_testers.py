@@ -32,6 +32,9 @@ def run_proportion_z_test(x_a, n_a, x_b, n_b, alpha=0.05, alternative="two-sided
     margin_error = z_crit * se_diff
     ci_lower = diff - margin_error
     ci_upper = diff + margin_error
+    odds_a = x_a / (n_a - x_a) if (n_a - x_a) > 0 else np.inf
+    odds_b = x_b / (n_b - x_b) if (n_b - x_b) > 0 else np.inf
+    odds_ratio = odds_b / odds_a if odds_a not in [0, np.inf] else np.inf
     
     reject_h0 = p_val < alpha
     
@@ -40,6 +43,11 @@ def run_proportion_z_test(x_a, n_a, x_b, n_b, alpha=0.05, alternative="two-sided
         "group_a": {"n": n_a, "successes": x_a, "rate": p_a},
         "group_b": {"n": n_b, "successes": x_b, "rate": p_b},
         "difference": diff,
+        "risk_difference": diff,
+        "odds_ratio": odds_ratio,
+        "effect_size_label": "Risk difference",
+        "effect_size_value": diff,
+        "effect_size_note": f"Odds ratio = {odds_ratio:.4f}",
         "statistic": z_stat,
         "p_value": p_val,
         "ci_lower": ci_lower,
@@ -73,6 +81,8 @@ def run_means_t_test(group_a, group_b, alpha=0.05, equal_var=True, alternative="
     t_stat, p_val = stats.ttest_ind(group_b, group_a, equal_var=equal_var, alternative=alternative)
     
     diff = mean_b - mean_a
+    pooled_sd_for_effect = np.sqrt(((n_a - 1) * var_a + (n_b - 1) * var_b) / (n_a + n_b - 2))
+    cohens_d = diff / pooled_sd_for_effect if pooled_sd_for_effect > 0 else 0.0
     if equal_var:
         df = n_a + n_b - 2
         s_pooled = np.sqrt(((n_a - 1) * var_a + (n_b - 1) * var_b) / df)
@@ -101,6 +111,9 @@ def run_means_t_test(group_a, group_b, alpha=0.05, equal_var=True, alternative="
         "group_a": {"n": n_a, "mean": mean_a, "variance": var_a, "std_dev": np.sqrt(var_a)},
         "group_b": {"n": n_b, "mean": mean_b, "variance": var_b, "std_dev": np.sqrt(var_b)},
         "difference": diff,
+        "effect_size_label": "Cohen's d",
+        "effect_size_value": cohens_d,
+        "effect_size_note": "Standardized mean difference: Group B - Group A",
         "statistic": t_stat,
         "p_value": p_val,
         "degrees_of_freedom": df,
@@ -129,6 +142,7 @@ def run_mann_whitney_u_test(group_a, group_b, alpha=0.05, alternative="two-sided
     
     median_a = np.median(group_a)
     median_b = np.median(group_b)
+    rank_biserial = (2 * u_stat / (n_a * n_b)) - 1
     
     reject_h0 = p_val < alpha
     
@@ -137,6 +151,9 @@ def run_mann_whitney_u_test(group_a, group_b, alpha=0.05, alternative="two-sided
         "group_a": {"n": n_a, "median": median_a},
         "group_b": {"n": n_b, "median": median_b},
         "difference": median_b - median_a,
+        "effect_size_label": "Rank-biserial correlation",
+        "effect_size_value": rank_biserial,
+        "effect_size_note": "Non-parametric effect size based on the Mann-Whitney U statistic",
         "statistic": u_stat,
         "p_value": p_val,
         "reject_h0": reject_h0,
@@ -154,6 +171,10 @@ def run_chi_square_test(observed, alpha=0.05):
     observed: 2D list or numpy array
     """
     chi2_stat, p_val, df, expected = stats.chi2_contingency(observed)
+    observed_arr = np.asarray(observed)
+    n = observed_arr.sum()
+    min_dim = min(observed_arr.shape) - 1
+    cramers_v = np.sqrt(chi2_stat / (n * min_dim)) if n > 0 and min_dim > 0 else 0.0
     
     reject_h0 = p_val < alpha
     
@@ -162,6 +183,9 @@ def run_chi_square_test(observed, alpha=0.05):
         "observed": observed,
         "expected": expected.tolist(),
         "statistic": chi2_stat,
+        "effect_size_label": "Cramer's V",
+        "effect_size_value": cramers_v,
+        "effect_size_note": "Association strength for categorical variables",
         "p_value": p_val,
         "degrees_of_freedom": df,
         "reject_h0": reject_h0,
@@ -170,5 +194,68 @@ def run_chi_square_test(observed, alpha=0.05):
             "hypothesis": r"H_0: \text{Variables are independent} \quad H_a: \text{Variables are dependent}",
             "chi2_stat": r"\chi^2 = \sum \frac{(O - E)^2}{E} = " + f"{chi2_stat:.4f}",
             "df": f"df = {df}"
+        }
+    }
+
+def run_one_way_anova(groups, group_names, alpha=0.05):
+    """
+    One-way ANOVA for comparing means across 3+ groups.
+    groups: list of numeric arrays
+    group_names: labels matching the groups list
+    """
+    f_stat, p_val = stats.f_oneway(*groups)
+    all_values = np.concatenate(groups)
+    grand_mean = np.mean(all_values)
+
+    ss_between = sum(len(group) * (np.mean(group) - grand_mean) ** 2 for group in groups)
+    ss_total = sum((value - grand_mean) ** 2 for value in all_values)
+    eta_squared = ss_between / ss_total if ss_total > 0 else 0.0
+
+    group_summaries = []
+    for name, group in zip(group_names, groups):
+        group_summaries.append({
+            "name": name,
+            "n": len(group),
+            "mean": np.mean(group),
+            "std_dev": np.std(group, ddof=1) if len(group) > 1 else 0.0,
+            "variance": np.var(group, ddof=1) if len(group) > 1 else 0.0,
+        })
+
+    tukey_results = []
+    try:
+        from statsmodels.stats.multicomp import pairwise_tukeyhsd
+
+        labels = np.concatenate([[name] * len(group) for name, group in zip(group_names, groups)])
+        tukey = pairwise_tukeyhsd(endog=all_values, groups=labels, alpha=alpha)
+        for row in tukey.summary().data[1:]:
+            tukey_results.append({
+                "group1": str(row[0]),
+                "group2": str(row[1]),
+                "mean_diff": float(row[2]),
+                "p_adj": float(row[3]),
+                "lower": float(row[4]),
+                "upper": float(row[5]),
+                "reject": bool(row[6]),
+            })
+    except Exception:
+        tukey_results = []
+
+    return {
+        "test_name": "One-Way ANOVA",
+        "group_summaries": group_summaries,
+        "difference": max(summary["mean"] for summary in group_summaries) - min(summary["mean"] for summary in group_summaries),
+        "statistic": f_stat,
+        "p_value": p_val,
+        "degrees_of_freedom": len(groups) - 1,
+        "reject_h0": p_val < alpha,
+        "alpha": alpha,
+        "effect_size_label": "Eta-squared",
+        "effect_size_value": eta_squared,
+        "effect_size_note": "Proportion of outcome variance explained by group membership",
+        "post_hoc": tukey_results,
+        "formulas": {
+            "hypothesis": r"H_0: \mu_1 = \mu_2 = \cdots = \mu_k \quad H_a: \text{At least one group mean differs}",
+            "f_stat": f"F = {f_stat:.4f}",
+            "eta_squared": r"\eta^2 = \frac{SS_{between}}{SS_{total}} = " + f"{eta_squared:.4f}",
         }
     }

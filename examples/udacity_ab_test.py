@@ -1,16 +1,23 @@
-import os
 import urllib.request
+from pathlib import Path
+import sys
+
 import pandas as pd
 import numpy as np
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from ab_testers import run_proportion_z_test
 from pdf_generator import generate_report
 
 def main():
-    csv_path = "ab_data.csv"
+    csv_path = Path(__file__).with_name("ab_data.csv")
     url = "https://raw.githubusercontent.com/collins-ugwu/Analyze-A-B-Test-Results/master/ab_data.csv"
     
     print("=== Step 1: Data Preparation ===")
-    if not os.path.exists(csv_path):
+    if not csv_path.exists():
         print(f"Downloading dataset from {url}...")
         try:
             # Add headers to avoid potential HTTP 403 Forbidden issues
@@ -56,7 +63,7 @@ def main():
                 'converted': conversions
             })
             df_sim.to_csv(csv_path, index=False)
-            print("Simulated dataset written to ab_data.csv!")
+            print(f"Simulated dataset written to {csv_path}!")
 
     print("Loading dataset...")
     df = pd.read_csv(csv_path)
@@ -99,8 +106,8 @@ def main():
             print(f"  {key}: {val}")
             
     print("\n=== Step 4: Generating PDF Report ===")
-    pdf_filename = "ab_test_report.pdf"
-    generate_report(test_results, output_filename=pdf_filename)
+    pdf_filename = PROJECT_ROOT / "ab_test_report.pdf"
+    generate_report(test_results, output_filename=str(pdf_filename))
     print(f"PDF report successfully generated: {pdf_filename}")
 
 if __name__ == "__main__":
