@@ -15,11 +15,15 @@ from stats_inference_toolkit import run_pipeline
 
 
 SAMPLE_DATASETS = {
-    "Client-style campaign data": "demo_data/client_style_campaign_data.csv",
-    "Conversion A/B test": "demo_data/conversion_data.csv",
-    "Revenue A/B test": "demo_data/revenue_data.csv",
-    "Session duration non-parametric": "demo_data/session_data.csv",
-    "Feedback Chi-Square": "demo_data/feedback_data.csv",
+    "[Business] Client-style campaign data": "demo_data/client_style_campaign_data.csv",
+    "[Business] Conversion A/B test": "demo_data/conversion_data.csv",
+    "[Business] Revenue A/B test": "demo_data/revenue_data.csv",
+    "[Business] Session duration non-parametric": "demo_data/session_data.csv",
+    "[Business] Feedback Chi-Square": "demo_data/feedback_data.csv",
+    "[Lab] Biology - cell viability": "demo_data/biology_cell_viability.csv",
+    "[Lab] Biology - enzyme activity ANOVA": "demo_data/biology_enzyme_anova.csv",
+    "[Lab] Chemistry - reaction yield": "demo_data/chemistry_yield_anova.csv",
+    "[Lab] Pharmacy - adverse events": "demo_data/pharmacy_adverse_events.csv",
 }
 
 EXAMPLE_UPLOAD_CSV = """customer_id,campaign_version,purchase_completed,order_value,region
@@ -38,6 +42,49 @@ EXAMPLE_UPLOAD_CSV = """customer_id,campaign_version,purchase_completed,order_va
 def load_sample_dataset(label):
     path = SAMPLE_DATASETS[label]
     return pd.read_csv(path), path
+
+
+def inject_brand_css():
+    st.markdown(
+        """
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;600&display=swap');
+
+            #MainMenu, footer, .stDeployButton, [data-testid="stToolbar"], [data-testid="stDecoration"] {
+                visibility: hidden;
+                height: 0%;
+                position: fixed;
+            }
+
+            .block-container {
+                padding-top: 1.4rem !important;
+                padding-left: 2rem !important;
+                padding-right: 2rem !important;
+            }
+
+            html, body, [class*="css"] {
+                font-family: 'Outfit', sans-serif;
+            }
+
+            .stats-title {
+                font-family: 'Space Grotesk', sans-serif;
+                font-size: 2.8rem;
+                font-weight: 800;
+                background: linear-gradient(135deg, #0F172A, #2563eb, #10B981);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                margin-bottom: 0.15rem;
+            }
+
+            .stats-subtitle {
+                color: #475569;
+                font-size: 1.08rem;
+                margin-bottom: 0.8rem;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def show_csv_upload_guide():
@@ -422,25 +469,48 @@ def show_result_summary(result, assumptions, df, group_col, value_col):
 
     if assumptions:
         st.subheader("Assumption checks")
-        st.write(f"Recommended route: {assumptions.get('recommended_test', 'N/A')}")
+        assumption_cols = st.columns(4)
+        assumption_cols[0].metric("Recommended route", assumptions.get("recommended_test", "N/A"))
+        assumption_cols[1].metric(
+            "Shapiro p - Group A",
+            format_number(assumptions["group_a_normality"].get("p_value")),
+        )
+        assumption_cols[2].metric(
+            "Shapiro p - Group B",
+            format_number(assumptions["group_b_normality"].get("p_value")),
+        )
+        assumption_cols[3].metric(
+            "Levene p",
+            format_number(assumptions["variance_equality"].get("p_value")),
+        )
         st.write(assumptions["group_a_normality"]["note"])
         st.write(assumptions["group_b_normality"]["note"])
         st.write(assumptions["variance_equality"]["note"])
+
+    if result.get("test_name") == "One-Way ANOVA" and result.get("post_hoc"):
+        st.subheader("Tukey post-hoc comparisons")
+        tukey_df = pd.DataFrame(result["post_hoc"])
+        st.dataframe(
+            tukey_df[["group1", "group2", "mean_diff", "p_adj", "lower", "upper", "reject"]],
+            width="stretch",
+            hide_index=True,
+        )
 
     show_visualization(df, group_col, value_col, result)
 
 
 def main():
     st.set_page_config(
-        page_title="A/B Test Analyzer",
-        page_icon="AB",
+        page_title="Statistical Inference Toolkit",
+        page_icon="ST",
         layout="wide",
     )
+    inject_brand_css()
 
-    st.title("A/B Test Analyzer - Live Demo")
-    st.write(
-        "Use sample data or upload a CSV with one group column and one metric/outcome column. "
-        "The app will choose the right statistical test and generate a client-ready PDF report."
+    st.markdown('<div class="stats-title">Statistical Inference Toolkit</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="stats-subtitle">A/B tests · lab experiments · surveys → test selection → PDF report</div>',
+        unsafe_allow_html=True,
     )
 
     source = st.radio(
@@ -500,13 +570,14 @@ def main():
     )
     audience = st.selectbox(
         "Who is this report for?",
-        ["fiverr_buyer", "small_business", "researcher"],
+        ["researcher", "small_business", "fiverr_buyer"],
         format_func=lambda value: {
             "fiverr_buyer": "Fiverr buyer - shortest, trust-focused summary",
             "small_business": "Small business / marketer - rollout decision report",
             "researcher": "Researcher / PhD - full statistical methodology",
         }[value],
     )
+    st.caption('For business clients, switch to "Small business" for a shorter decision summary.')
 
     if group_col == value_col:
         st.error("Group column and value column must be different.")
